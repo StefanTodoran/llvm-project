@@ -55,11 +55,14 @@ char AArch64DIT::ID = 0;
 } // end anonymous namespace
 
 INITIALIZE_PASS(AArch64DIT, "aarch64-dit",
-                AARCH64_DEAD_REG_DEF_NAME, false, false)
+                AARCH64_DIT_NAME, false, false)
 
-static bool usesFrameIndex(const MachineInstr &MI) {
-  for (const MachineOperand &MO : MI.uses())
-    if (MO.isFI())
-      return true;
+bool AArch64DIT::runOnMachineFunction(MachineFunction &F) {
+  errs() << "runOnMachineFunction DIT test" << "\n";
+
   return false;
+}
+
+FunctionPass *llvm::createAArch64DITPass() {
+  return new AArch64DIT();
 }

@@ -30,6 +30,7 @@ class FunctionPass;
 class InstructionSelector;
 
 FunctionPass *createAArch64DeadRegisterDefinitions();
+FunctionPass *createAArch64DITPass();
 FunctionPass *createAArch64RedundantCopyEliminationPass();
 FunctionPass *createAArch64CondBrTuning();
 FunctionPass *createAArch64CompressJumpTablesPass();
@@ -86,6 +87,7 @@ void initializeAArch64ConditionOptimizerPass(PassRegistry&);
 void initializeAArch64ConditionalComparesPass(PassRegistry &);
 void initializeAArch64DAGToDAGISelPass(PassRegistry &);
 void initializeAArch64DeadRegisterDefinitionsPass(PassRegistry&);
+void initializeAArch64DITPass(PassRegistry&);
 void initializeAArch64ExpandPseudoPass(PassRegistry &);
 void initializeAArch64GlobalsTaggingPass(PassRegistry &);
 void initializeAArch64LoadStoreOptPass(PassRegistry&);
