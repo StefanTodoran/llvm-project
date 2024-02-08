@@ -21,6 +21,7 @@
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "aarch64-dit"
@@ -57,10 +58,34 @@ char AArch64DIT::ID = 0;
 INITIALIZE_PASS(AArch64DIT, "aarch64-dit",
                 AARCH64_DIT_NAME, false, false)
 
-bool AArch64DIT::runOnMachineFunction(MachineFunction &F) {
-  errs() << "runOnMachineFunction DIT test" << "\n";
+void AArch64DIT::processMachineBasicBlock(MachineBasicBlock &MBB) {
+  // TODO
+}
 
-  return false;
+void AArch64DIT::insertBlockStartDITSet(MachineBasicBlock &MBB) {
+  MachineInstr &firstInstr = *MBB.instr_front();
+  // BuildMI(*MBB, firstInstr, *firstInstr.getDebugLoc(),
+}
+
+bool AArch64DIT::runOnMachineFunction(MachineFunction &F) {
+  // TODO: figure out interface and if this should be skipped
+
+  TRI = MF.getSubtarget().getRegisterInfo();
+  TII = MF.getSubtarget().getInstrInfo();
+  MRI = &MF.getRegInfo();
+
+  LLVM_DEBUG(dbgs() << "***** AArch64DIT ****\n");
+
+  changed = false;
+  for (autho &MBB : MF) {
+    if (!changed) {
+      insertBlockStartDITSet(MBB);
+      changed = true;
+    }
+    processMachineBasicBlock(MBB);
+  }
+
+  return changed;
 }
 
 FunctionPass *llvm::createAArch64DITPass() {
