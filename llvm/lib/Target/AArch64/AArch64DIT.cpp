@@ -35,6 +35,8 @@ private:
   const MachineRegisterInfo *MRI;
   const TargetInstrInfo *TII;
   bool Changed;
+  void insertBlockStartDITSet(MachineBasicBlock &MBB,
+                              const TargetInstrInfo* TII);
   void processMachineBasicBlock(MachineBasicBlock &MBB);
 public:
   static char ID; // Pass identification, replacement for typeid.
@@ -62,12 +64,46 @@ void AArch64DIT::processMachineBasicBlock(MachineBasicBlock &MBB) {
   // TODO
 }
 
-void AArch64DIT::insertBlockStartDITSet(MachineBasicBlock &MBB) {
-  MachineInstr &firstInstr = *MBB.instr_front();
-  // BuildMI(*MBB, firstInstr, *firstInstr.getDebugLoc(),
+void AArch64DIT::insertBlockStartDITSet(MachineBasicBlock &MBB,
+                                        const TargetInstrInfo* TII) {
+  MachineInstr &firstInstr = MBB.instr_front();
+
+  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::SUBXri))
+    .addDef(AArch64::SP)
+    .addUse(AArch64::SP)
+    .addImm(16)
+    .addImm(0);
+
+  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::STRXui))
+    .addReg(AArch64::X14)
+    .addReg(AArch64::SP)
+    .addImm(0);
+
+  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::MRS))
+    .addReg(AArch64::X14)
+    .addImm(AArch64SysReg::DIT);
+
+  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::STRXui))
+    .addReg(AArch64::X14)
+    .addReg(AArch64::SP)
+    .addImm(1);
+
+  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::MSR))
+    .addImm(AArch64SysReg::DIT)
+    .addImm(1);
+
+  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::DSB))
+    .addImm(0xf);
+  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::ISB))
+    .addImm(0xf);
+
+  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::LDRXui))
+    .addReg(AArch64::X14)
+    .addReg(AArch64::SP)
+    .addImm(0);
 }
 
-bool AArch64DIT::runOnMachineFunction(MachineFunction &F) {
+bool AArch64DIT::runOnMachineFunction(MachineFunction &MF) {
   // TODO: figure out interface and if this should be skipped
 
   TRI = MF.getSubtarget().getRegisterInfo();
@@ -76,13 +112,19 @@ bool AArch64DIT::runOnMachineFunction(MachineFunction &F) {
 
   LLVM_DEBUG(dbgs() << "***** AArch64DIT ****\n");
 
-  changed = false;
-  for (autho &MBB : MF) {
+  bool changed = false;
+  for (auto &MBB : MF) {
     if (!changed) {
-      insertBlockStartDITSet(MBB);
+      insertBlockStartDITSet(MBB, TII);
       changed = true;
     }
     processMachineBasicBlock(MBB);
+  }
+
+  for (auto &MBB : MF) {
+    for (auto &MI : MBB) {
+      errs() << MI << "\n";
+    }
   }
 
   return changed;
