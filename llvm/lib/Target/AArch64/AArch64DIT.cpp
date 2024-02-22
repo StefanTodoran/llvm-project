@@ -35,9 +35,13 @@ private:
   const MachineRegisterInfo *MRI;
   const TargetInstrInfo *TII;
   bool Changed;
+  bool processMachineBasicBlock(MachineBasicBlock &MBB,
+                                const TargetInstrInfo* TII,
+                                bool isFirstBlock);
   void insertBlockStartDITSet(MachineBasicBlock &MBB,
                               const TargetInstrInfo* TII);
-  void processMachineBasicBlock(MachineBasicBlock &MBB);
+  void insertBlockEndDITUnset(MachineBasicBlock &MBB,
+                              const TargetInstrInfo* TII);
 public:
   static char ID; // Pass identification, replacement for typeid.
   AArch64DIT() : MachineFunctionPass(ID) {
@@ -60,8 +64,29 @@ char AArch64DIT::ID = 0;
 INITIALIZE_PASS(AArch64DIT, "aarch64-dit",
                 AARCH64_DIT_NAME, false, false)
 
-void AArch64DIT::processMachineBasicBlock(MachineBasicBlock &MBB) {
-  // TODO
+bool AArch64DIT::processMachineBasicBlock(MachineBasicBlock &MBB,
+                                          const TargetInstrInfo* TII,
+                                          bool isFirstBlock) {
+  bool blockChanged = false;
+  bool inFrameSetup = false;
+
+  for (auto It = MBB.begin(); It != MBB.end(); ++It) {
+    auto &MI = *It;
+
+    bool curFS = MI.getFlag(MachineInstr::MIFlag::FrameSetup);
+    if (!curFS && (inFrameSetup || isFirstBlock)) {
+      insertBlockStartDITSet(MBB, TII);
+      blockChanged = true;
+    }
+    inFrameSetup = curFS;
+
+    if (MI.getFlag(MachineInstr::MIFlag::FrameDestroy)) {
+      insertBlockEndDITUnset(MBB, TII);
+      blockChanged = true;
+    }
+  }
+
+  return blockChanged;
 }
 
 void AArch64DIT::insertBlockStartDITSet(MachineBasicBlock &MBB,
@@ -103,6 +128,37 @@ void AArch64DIT::insertBlockStartDITSet(MachineBasicBlock &MBB,
     .addImm(0);
 }
 
+void AArch64DIT::insertBlockEndDITUnset(MachineBasicBlock &MBB,
+                                        const TargetInstrInfo* TII) {
+  MachineInstr &lastInstr = MBB.instr_back();
+
+  BuildMI(MBB, lastInstr, lastInstr.getDebugLoc(), TII->get(AArch64::SUBXri))
+    .addDef(AArch64::SP)
+    .addUse(AArch64::SP)
+    .addImm(16)
+    .addImm(0);
+
+  BuildMI(MBB, lastInstr, lastInstr.getDebugLoc(), TII->get(AArch64::STRXui))
+    .addDef(AArch64::X14)
+    .addUse(AArch64::SP)
+    .addImm(0);
+
+  BuildMI(MBB, lastInstr, lastInstr.getDebugLoc(), TII->get(AArch64::LDRXui))
+    .addReg(AArch64::X14)
+    .addReg(AArch64::SP)
+    .addImm(3);
+
+  BuildMI(MBB, lastInstr, lastInstr.getDebugLoc(), TII->get(AArch64::MSR))
+    .addImm(AArch64SysReg::DIT)
+    .addReg(AArch64::X14);
+
+  BuildMI(MBB, lastInstr, lastInstr.getDebugLoc(), TII->get(AArch64::ADDXri))
+    .addDef(AArch64::SP)
+    .addUse(AArch64::SP)
+    .addImm(16)
+    .addImm(0);
+}
+
 bool AArch64DIT::runOnMachineFunction(MachineFunction &MF) {
   // TODO: figure out interface and if this should be skipped
 
@@ -113,12 +169,11 @@ bool AArch64DIT::runOnMachineFunction(MachineFunction &MF) {
   LLVM_DEBUG(dbgs() << "***** AArch64DIT ****\n");
 
   bool changed = false;
-  for (auto &MBB : MF) {
-    if (!changed) {
-      insertBlockStartDITSet(MBB, TII);
-      changed = true;
-    }
-    processMachineBasicBlock(MBB);
+  for (auto It = MF.begin(); It != MF.end(); ++It) {
+    auto &MBB = *It;
+    bool isFirst = It == MF.begin();
+
+    changed = processMachineBasicBlock(MBB, TII, isFirst) || changed;;
   }
 
   for (auto &MBB : MF) {
