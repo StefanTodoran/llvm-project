@@ -4458,3 +4458,12 @@ def CountedBy : InheritableAttr {
       void setCountedByFieldLoc(SourceRange Loc) { CountedByFieldLoc = Loc; }
   }];
 }
+
+def DITProtected : InheritableAttr, TargetSpecificAttr<TargetAArch64> {
+  let Spellings = [GCC<"dit">, Clang<"dit">];
+  let Subjects = SubjectList<[Function]>;
+  // TODO: Add documentation!
+  let Documentation = [Undocumented];
+}
+def : MutualExclusions<[DITProtected, AlwaysInline, GNUInline]>;
+
