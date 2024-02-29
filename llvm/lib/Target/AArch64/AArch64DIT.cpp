@@ -22,6 +22,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include <vector>
 using namespace llvm;
 
 #define DEBUG_TYPE "aarch64-dit"
@@ -39,8 +40,10 @@ private:
                                 const TargetInstrInfo* TII,
                                 bool isFirstBlock);
   void insertBlockStartDITSet(MachineBasicBlock &MBB,
+                              MachineInstr &insertBefore,
                               const TargetInstrInfo* TII);
   void insertBlockEndDITUnset(MachineBasicBlock &MBB,
+                              MachineInstr &insertBefore,
                               const TargetInstrInfo* TII);
 public:
   static char ID; // Pass identification, replacement for typeid.
@@ -70,93 +73,108 @@ bool AArch64DIT::processMachineBasicBlock(MachineBasicBlock &MBB,
   bool blockChanged = false;
   bool inFrameSetup = false;
 
+  std::vector<MachineInstr*> setTargets;
+  std::vector<MachineInstr*> unsetTargets;
+
   for (auto It = MBB.begin(); It != MBB.end(); ++It) {
     auto &MI = *It;
 
     bool curFS = MI.getFlag(MachineInstr::MIFlag::FrameSetup);
-    if (!curFS && (inFrameSetup || isFirstBlock)) {
-      insertBlockStartDITSet(MBB, TII);
+    if (!curFS && inFrameSetup) {
+      setTargets.push_back(&MI);
       blockChanged = true;
     }
     inFrameSetup = curFS;
 
-    if (MI.getFlag(MachineInstr::MIFlag::FrameDestroy)) {
-      insertBlockEndDITUnset(MBB, TII);
+    if (unsetTargets.empty() && MI.getFlag(MachineInstr::MIFlag::FrameDestroy)) {
+      unsetTargets.push_back(&MI);
       blockChanged = true;
     }
+  }
+
+  if (isFirstBlock && setTargets.empty()) {
+    setTargets.push_back(&(*MBB.begin()));
+  }
+
+  for (auto MI : setTargets) {
+    errs() << *MI;
+    insertBlockStartDITSet(MBB, *MI, TII);
+  }
+
+  for (auto MI : unsetTargets) {
+    errs() << *MI;
+    insertBlockEndDITUnset(MBB, *MI, TII);
   }
 
   return blockChanged;
 }
 
 void AArch64DIT::insertBlockStartDITSet(MachineBasicBlock &MBB,
+                                        MachineInstr &insertBefore,
                                         const TargetInstrInfo* TII) {
-  MachineInstr &firstInstr = MBB.instr_front();
+  // BuildMI(MBB, insertBefore, insertBefore.getDebugLoc(), TII->get(AArch64::SUBXri))
+  //   .addDef(AArch64::SP)
+  //   .addUse(AArch64::SP)
+  //   .addImm(16)
+  //   .addImm(0);
 
-  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::SUBXri))
-    .addDef(AArch64::SP)
-    .addUse(AArch64::SP)
-    .addImm(16)
-    .addImm(0);
+  // BuildMI(MBB, insertBefore, insertBefore.getDebugLoc(), TII->get(AArch64::STRXui))
+  //   .addReg(AArch64::X14)
+  //   .addReg(AArch64::SP)
+  //   .addImm(0);
 
-  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::STRXui))
-    .addReg(AArch64::X14)
-    .addReg(AArch64::SP)
-    .addImm(0);
-
-  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::MRS))
+  BuildMI(MBB, insertBefore, insertBefore.getDebugLoc(), TII->get(AArch64::MRS))
     .addReg(AArch64::X14)
     .addImm(AArch64SysReg::DIT);
 
-  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::STRXui))
-    .addReg(AArch64::X14)
-    .addReg(AArch64::SP)
-    .addImm(1);
+  // BuildMI(MBB, insertBefore, insertBefore.getDebugLoc(), TII->get(AArch64::STRXui))
+  //   .addReg(AArch64::X14)
+  //   .addReg(AArch64::SP)
+  //   .addImm(1);
 
-  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::MSR))
+  BuildMI(MBB, insertBefore, insertBefore.getDebugLoc(), TII->get(AArch64::MSR))
     .addImm(AArch64SysReg::DIT)
     .addImm(1);
 
-  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::DSB))
+  BuildMI(MBB, insertBefore, insertBefore.getDebugLoc(), TII->get(AArch64::DSB))
     .addImm(0xf);
-  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::ISB))
+  BuildMI(MBB, insertBefore, insertBefore.getDebugLoc(), TII->get(AArch64::ISB))
     .addImm(0xf);
 
-  BuildMI(MBB, firstInstr, firstInstr.getDebugLoc(), TII->get(AArch64::LDRXui))
-    .addReg(AArch64::X14)
-    .addReg(AArch64::SP)
-    .addImm(0);
+  // BuildMI(MBB, insertBefore, insertBefore.getDebugLoc(), TII->get(AArch64::LDRXui))
+  //   .addReg(AArch64::X14)
+  //   .addReg(AArch64::SP)
+  //   .addImm(0);
 }
 
 void AArch64DIT::insertBlockEndDITUnset(MachineBasicBlock &MBB,
+                                        MachineInstr &insertBefore,
                                         const TargetInstrInfo* TII) {
-  MachineInstr &lastInstr = MBB.instr_back();
+  // BuildMI(MBB, insertBefore, insertBefore.getDebugLoc(), TII->get(AArch64::SUBXri))
+  //   .addDef(AArch64::SP)
+  //   .addUse(AArch64::SP)
+  //   .addImm(16)
+  //   .addImm(0);
 
-  BuildMI(MBB, lastInstr, lastInstr.getDebugLoc(), TII->get(AArch64::SUBXri))
-    .addDef(AArch64::SP)
-    .addUse(AArch64::SP)
-    .addImm(16)
-    .addImm(0);
+  // BuildMI(MBB, insertBefore, insertBefore.getDebugLoc(), TII->get(AArch64::STRXui))
+  //   .addDef(AArch64::X14)
+  //   .addUse(AArch64::SP)
+  //   .addImm(0);
 
-  BuildMI(MBB, lastInstr, lastInstr.getDebugLoc(), TII->get(AArch64::STRXui))
-    .addDef(AArch64::X14)
-    .addUse(AArch64::SP)
-    .addImm(0);
+  // BuildMI(MBB, insertBefore, insertBefore.getDebugLoc(), TII->get(AArch64::LDRXui))
+  //   .addReg(AArch64::X14)
+  //   .addReg(AArch64::SP)
+  //   .addImm(3);
 
-  BuildMI(MBB, lastInstr, lastInstr.getDebugLoc(), TII->get(AArch64::LDRXui))
-    .addReg(AArch64::X14)
-    .addReg(AArch64::SP)
-    .addImm(3);
-
-  BuildMI(MBB, lastInstr, lastInstr.getDebugLoc(), TII->get(AArch64::MSR))
+  BuildMI(MBB, insertBefore, insertBefore.getDebugLoc(), TII->get(AArch64::MSR))
     .addImm(AArch64SysReg::DIT)
     .addReg(AArch64::X14);
 
-  BuildMI(MBB, lastInstr, lastInstr.getDebugLoc(), TII->get(AArch64::ADDXri))
-    .addDef(AArch64::SP)
-    .addUse(AArch64::SP)
-    .addImm(16)
-    .addImm(0);
+  // BuildMI(MBB, insertBefore, insertBefore.getDebugLoc(), TII->get(AArch64::ADDXri))
+  //   .addDef(AArch64::SP)
+  //   .addUse(AArch64::SP)
+  //   .addImm(16)
+  //   .addImm(0);
 }
 
 bool AArch64DIT::runOnMachineFunction(MachineFunction &MF) {
@@ -173,12 +191,12 @@ bool AArch64DIT::runOnMachineFunction(MachineFunction &MF) {
     auto &MBB = *It;
     bool isFirst = It == MF.begin();
 
-    changed = processMachineBasicBlock(MBB, TII, isFirst) || changed;;
+    changed = processMachineBasicBlock(MBB, TII, isFirst) || changed;
   }
 
   for (auto &MBB : MF) {
     for (auto &MI : MBB) {
-      errs() << MI << "\n";
+      errs() << MI;
     }
   }
 
