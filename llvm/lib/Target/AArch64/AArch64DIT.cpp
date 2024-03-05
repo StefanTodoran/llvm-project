@@ -22,6 +22,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/IR/Attributes.h"
 #include <vector>
 using namespace llvm;
 
@@ -178,7 +179,8 @@ void AArch64DIT::insertBlockEndDITUnset(MachineBasicBlock &MBB,
 }
 
 bool AArch64DIT::runOnMachineFunction(MachineFunction &MF) {
-  // TODO: figure out interface and if this should be skipped
+  if (!MF.getFunction().hasFnAttribute(llvm::Attribute::AttrKind::DITProtected))
+    return false;
 
   TRI = MF.getSubtarget().getRegisterInfo();
   TII = MF.getSubtarget().getInstrInfo();

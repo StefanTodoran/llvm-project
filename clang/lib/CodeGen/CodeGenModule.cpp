@@ -2395,6 +2395,9 @@ void CodeGenModule::SetLLVMFunctionAttributesForDefinition(const Decl *D,
   else if (isStackProtectorOn(LangOpts, getTriple(), LangOptions::SSPReq))
     B.addAttribute(llvm::Attribute::StackProtectReq);
 
+  if (D->hasAttr<DITProtectedAttr>())
+    B.addAttribute(llvm::Attribute::DITProtected);
+
   if (!D) {
     // If we don't have a declaration to control inlining, the function isn't
     // explicitly marked as alwaysinline for semantic reasons, and inlining is

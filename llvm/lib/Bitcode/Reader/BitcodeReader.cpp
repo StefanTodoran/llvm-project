@@ -2049,6 +2049,8 @@ static Attribute::AttrKind getAttrFromCode(uint64_t Code) {
     return Attribute::StackProtectStrong;
   case bitc::ATTR_KIND_SAFESTACK:
     return Attribute::SafeStack;
+  case bitc::ATTR_KIND_DITPROTECTED:
+    return Attribute::DITProtected;
   case bitc::ATTR_KIND_SHADOWCALLSTACK:
     return Attribute::ShadowCallStack;
   case bitc::ATTR_KIND_STRICT_FP:

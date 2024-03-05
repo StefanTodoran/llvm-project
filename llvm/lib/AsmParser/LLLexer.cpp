@@ -513,6 +513,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(appending);
   KEYWORD(dllimport);
   KEYWORD(dllexport);
+  KEYWORD(ditprotected);
   KEYWORD(common);
   KEYWORD(default);
   KEYWORD(hidden);

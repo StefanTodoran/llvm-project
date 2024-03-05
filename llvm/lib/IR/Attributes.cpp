@@ -438,6 +438,10 @@ std::string Attribute::getAsString(bool InAttrGrp) const {
     return Result;
   }
 
+  if (hasAttribute(Attribute::DITProtected)) {
+    return std::string("dit");
+  }
+
   // FIXME: These should be output like this:
   //
   //   align=4

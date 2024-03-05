@@ -4460,7 +4460,7 @@ def CountedBy : InheritableAttr {
 }
 
 def DITProtected : InheritableAttr, TargetSpecificAttr<TargetAArch64> {
-  let Spellings = [GCC<"dit">, Clang<"dit">];
+  let Spellings = [Clang<"dit">];
   let Subjects = SubjectList<[Function]>;
   // TODO: Add documentation!
   let Documentation = [Undocumented];
